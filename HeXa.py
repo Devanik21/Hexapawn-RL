@@ -873,9 +873,7 @@ if 'agent1' in st.session_state and st.session_state.agent1.q_table:
 else:
     st.info("Train or load agents to see the Final Battle option.")
 
-# ============================================================================
-# Human vs AI Arena
-# ============================================================================
+
 
 # ============================================================================
 # Human vs AI Arena
@@ -884,194 +882,214 @@ else:
 st.markdown("---")
 st.header("🎮 Human vs. AI Arena")
 
-# Custom CSS for the game board
+# --- 1. Ultimate UI Styling (CSS) ---
 st.markdown("""
 <style>
+    /* Main Board Container styling */
     .stButton button {
-        height: 70px;
+        height: 85px;
         width: 100%;
-        font-size: 28px !important;
-        font-weight: bold !important;
-        border-radius: 8px !important;
+        font-size: 32px !important;
+        border-radius: 12px !important;
         border: 2px solid #333 !important;
-        transition: all 0.2s ease-in-out;
+        margin-bottom: 8px;
+        transition: all 0.2s ease-in-out; 
     }
     
-    /* Styling for Human Pawns */
-    div[data-testid="stVerticalBlock"] .player-human button {
-        background-color: #2b3b4e !important;
-        color: #4a90e2 !important;
-        border-color: #4a90e2 !important;
-    }
-    div[data-testid="stVerticalBlock"] .player-human button:hover {
-        background-color: #4a90e2 !important;
+    /* HUMAN PIECES (Blue/Cyan Theme) */
+    div[data-testid="stVerticalBlock"] .human-piece button {
+        background: linear-gradient(145deg, #1e3c72, #2a5298) !important;
         color: white !important;
+        border: 2px solid #4facfe !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    div[data-testid="stVerticalBlock"] .human-piece button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(79, 172, 254, 0.4);
+    }
+    div[data-testid="stVerticalBlock"] .human-piece-selected button {
+        background: #4facfe !important; /* Bright highlight */
+        color: white !important;
+        border: 3px solid #fff !important;
+        box-shadow: 0 0 15px #4facfe;
     }
 
-    /* Styling for AI Pawns */
-    div[data-testid="stVerticalBlock"] .player-ai button {
-        background-color: #3e2b2b !important;
-        color: #e74c3c !important;
-        border-color: #e74c3c !important;
+    /* AI PIECES (Red/Dark Theme) */
+    div[data-testid="stVerticalBlock"] .ai-piece button {
+        background: linear-gradient(145deg, #870000, #190a05) !important;
+        color: #ff6b6b !important;
+        border: 2px solid #870000 !important;
         cursor: not-allowed;
     }
 
-    /* Styling for Valid Move Targets */
-    div[data-testid="stVerticalBlock"] .move-target button {
-        background-color: #1e3a2f !important;
-        color: #00ff00 !important;
-        border-color: #00ff00 !important;
-        opacity: 0.8;
+    /* VALID MOVE TARGETS (Green Glow) */
+    div[data-testid="stVerticalBlock"] .valid-move button {
+        background-color: rgba(46, 204, 113, 0.2) !important;
+        border: 2px dashed #2ecc71 !important;
+        color: transparent !important;
     }
-    div[data-testid="stVerticalBlock"] .move-target button:hover {
-        background-color: #00ff00 !important;
-        color: black !important;
-        opacity: 1.0;
+    div[data-testid="stVerticalBlock"] .valid-move button:hover {
+        background-color: rgba(46, 204, 113, 0.6) !important;
+        transform: scale(0.95);
     }
 
-    /* Styling for Empty/Inactive Cells */
+    /* EMPTY CELLS */
     div[data-testid="stVerticalBlock"] .empty-cell button {
-        background-color: #1a1a1a !important;
-        border: 1px dashed #333 !important;
-        cursor: default;
+        background-color: #0e1117 !important;
+        border: 1px solid #262730 !important;
+        color: transparent !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
+# --- 2. Arena Logic & State Management ---
+
 if 'agent1' in st.session_state and st.session_state.agent1.q_table:
     
-    # --- Game Setup Controls ---
-    with st.container():
-        col_h1, col_h2, col_h3 = st.columns([1, 1, 1])
-        with col_h1:
-            opponent_choice = st.selectbox("Select Opponent", ["Agent 1 (White)", "Agent 2 (Black)"], key="arena_opp")
-        with col_h2:
-            starter = st.selectbox("First Move", ["Human", "AI"], key="arena_start")
-        with col_h3:
-            st.write("")
-            start_game = st.button("🔥 Start New Match", use_container_width=True, type="primary")
+    # Game Controls
+    col_c1, col_c2, col_c3 = st.columns([1.5, 1, 1])
+    with col_c1:
+        opponent_choice = st.selectbox("🤖 Select Opponent", ["Agent 1 (White - Defensive)", "Agent 2 (Black - Aggressive)"], key="arena_opp")
+    with col_c2:
+        starter = st.selectbox("🎲 Who Starts?", ["Human", "AI"], key="arena_start")
+    with col_c3:
+        st.write("") # Spacer
+        start_btn = st.button("🔥 Start Match", use_container_width=True, type="primary")
 
-    # --- Initialize/Reset Game State ---
-    if start_game:
+    # Initialize Game Session
+    if start_btn:
         st.session_state.human_env = Hexapawn()
         st.session_state.human_game_active = True
         st.session_state.selected_pawn = None
+        st.session_state.game_message = "Good Luck! Capture the enemy or reach the other side."
         
-        # Configure Player IDs
+        # Setup Players
         if "Agent 1" in opponent_choice:
             st.session_state.ai_player_id = 1
             st.session_state.ai_agent = st.session_state.agent1
             st.session_state.human_player_id = 2
+            st.session_state.human_icon = "♟" # Black
+            st.session_state.ai_icon = "♙"    # White
         else:
             st.session_state.ai_player_id = 2
             st.session_state.ai_agent = st.session_state.agent2
             st.session_state.human_player_id = 1
-        
-        # Set initial turn
-        if starter == "AI":
-            st.session_state.current_turn = st.session_state.ai_player_id
-        else:
-            st.session_state.current_turn = st.session_state.human_player_id
+            st.session_state.human_icon = "♙" # White
+            st.session_state.ai_icon = "♟"    # Black
+            
+        # Set First Turn
+        st.session_state.current_turn_id = st.session_state.ai_player_id if starter == "AI" else st.session_state.human_player_id
         st.rerun()
 
-    # --- Game Loop ---
+    # --- 3. The Game Loop ---
     if 'human_env' in st.session_state and st.session_state.human_game_active:
         h_env = st.session_state.human_env
         
-        # 1. Check Game Over
+        # A. Check Game Over Conditions
         if h_env.game_over:
-            st.markdown("### Game Over!")
+            st.markdown("### 🏁 Match Result")
             if h_env.winner == st.session_state.human_player_id:
-                st.success(f"🎉 VICTORY! You defeated the AI!")
+                st.balloons()
+                st.success(f"🎉 **VICTORY!** You outsmarted the AI!")
             elif h_env.winner == st.session_state.ai_player_id:
-                st.error(f"💀 DEFEAT! The AI ({opponent_choice}) won.")
+                st.error(f"💀 **DEFEAT!** The AI won this round.")
             else:
-                st.warning("🤝 DRAW! No legal moves left.")
+                st.warning("🤝 **DRAW!** It's a stalemate.")
             
-            if st.button("Play Again"):
+            if st.button("🔄 Play Again", type="secondary", use_container_width=True):
+                st.session_state.human_game_active = False
                 st.rerun()
-
-        # 2. AI Turn Handling (Automatic)
+                
+        # B. AI Turn Logic (Automatic)
         elif h_env.current_player == st.session_state.ai_player_id:
-            with st.spinner(f"🤖 AI ({opponent_choice}) is thinking..."):
+            # Display board statically while AI thinks
+            st.info(f"🤖 **AI ({st.session_state.ai_icon}) is thinking...**")
+            
+            # Use a progress bar for visual "thinking" effect
+            prog_bar = st.progress(0)
+            for i in range(100):
                 import time
-                time.sleep(0.6) # Small delay for realism
-                
-                ai_action = st.session_state.ai_agent.choose_action(h_env, training=False)
-                
-                if ai_action:
-                    h_env.make_move(ai_action)
-                else:
-                    # Should be handled by game logic, but safe fallback
-                    h_env.game_over = True
-                    h_env.winner = st.session_state.human_player_id
-                
-                st.rerun()
+                time.sleep(0.005) # Brief delay for realism
+                prog_bar.progress(i + 1)
+            prog_bar.empty()
 
-        # 3. Human Turn & Board Rendering
+            # Execute AI Move
+            ai_action = st.session_state.ai_agent.choose_action(h_env, training=False)
+            if ai_action:
+                h_env.make_move(ai_action)
+                st.session_state.game_message = "AI has moved. Your turn!"
+            else:
+                # AI has no moves -> Human wins (handled by env, but safe check)
+                h_env.game_over = True
+                h_env.winner = st.session_state.human_player_id
+            
+            st.rerun()
+
+        # C. Human Turn Logic (Interactive)
         else:
-            turn_text = "🔵 Your Turn (Move Up)" if st.session_state.human_player_id == 1 else "🔴 Your Turn (Move Down)"
-            st.info(f"**{turn_text}**")
+            st.success(f"👤 **Your Turn ({st.session_state.human_icon})** | {st.session_state.game_message}")
             
-            # Prepare valid moves for the selected pawn
+            # Prepare Grid Data
+            board = h_env.board
+            available_moves = h_env.get_available_actions()
+            
+            # Filter moves if a pawn is selected
             valid_destinations = []
-            all_moves = h_env.get_available_actions()
-            
             if st.session_state.selected_pawn:
-                valid_destinations = [to_pos for from_pos, to_pos in all_moves if from_pos == st.session_state.selected_pawn]
+                valid_destinations = [target for (start, target) in available_moves if start == st.session_state.selected_pawn]
 
             # Render 3x3 Grid
-            board = h_env.board
-            
             for r in range(3):
                 cols = st.columns(3)
                 for c in range(3):
-                    cell_val = board[r, c]
-                    key_id = f"{r}-{c}-{len(h_env.move_history)}" # Unique key per move
-                    
                     with cols[c]:
-                        # CASE A: Human Pawn (Click to Select)
-                        if cell_val == st.session_state.human_player_id:
-                            # Highlight if selected
-                            label = "◉" if st.session_state.selected_pawn == (r, c) else "♟"
+                        cell_val = board[r, c]
+                        # Unique key for every button state to prevent ghost interactions
+                        btn_key = f"b_{r}_{c}_{len(h_env.move_history)}"
+                        
+                        # --- LOGIC: Valid Move Target (Empty Space or Enemy Capture) ---
+                        if (r, c) in valid_destinations:
+                            st.markdown('<div class="valid-move">', unsafe_allow_html=True)
+                            # Show 'X' for capture, 'O' for move, or just empty click target
+                            symbol = "⚔️" if cell_val != 0 else "◎" 
+                            if st.button(symbol, key=btn_key, help="Click to Move Here"):
+                                # EXECUTE HUMAN MOVE
+                                move = (st.session_state.selected_pawn, (r, c))
+                                h_env.make_move(move)
+                                st.session_state.selected_pawn = None
+                                st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
+
+                        # --- LOGIC: Human Pawn ---
+                        elif cell_val == st.session_state.human_player_id:
+                            is_selected = (st.session_state.selected_pawn == (r, c))
+                            style_class = "human-piece-selected" if is_selected else "human-piece"
                             
-                            # Use a container to apply CSS class
-                            container = st.container()
-                            with container:
-                                st.markdown('<div class="player-human">', unsafe_allow_html=True)
-                                if st.button(label, key=f"btn_p_{key_id}"):
-                                    if st.session_state.selected_pawn == (r, c):
-                                        st.session_state.selected_pawn = None # Deselect
-                                    else:
-                                        st.session_state.selected_pawn = (r, c) # Select
-                                    st.rerun()
-                                st.markdown('</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="{style_class}">', unsafe_allow_html=True)
+                            if st.button(st.session_state.human_icon, key=btn_key):
+                                if is_selected:
+                                    st.session_state.selected_pawn = None # Deselect
+                                    st.session_state.game_message = "Pawn deselected."
+                                else:
+                                    st.session_state.selected_pawn = (r, c) # Select
+                                    st.session_state.game_message = "Select a highlighted square to move."
+                                st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
 
-                        # CASE B: Empty Spot (Valid Move Target?)
-                        elif cell_val == 0:
-                            if (r, c) in valid_destinations:
-                                # This is a valid move target -> Show Green Button
-                                st.markdown('<div class="move-target">', unsafe_allow_html=True)
-                                if st.button("◎", key=f"btn_m_{key_id}", help="Click to Move Here"):
-                                    move = (st.session_state.selected_pawn, (r, c))
-                                    h_env.make_move(move)
-                                    st.session_state.selected_pawn = None
-                                    st.rerun()
-                                st.markdown('</div>', unsafe_allow_html=True)
-                            else:
-                                # Just empty space
-                                st.markdown('<div class="empty-cell">', unsafe_allow_html=True)
-                                st.button(" ", key=f"btn_e_{key_id}", disabled=True)
-                                st.markdown('</div>', unsafe_allow_html=True)
-
-                        # CASE C: AI Pawn (Display Only)
+                        # --- LOGIC: AI Pawn ---
                         elif cell_val == st.session_state.ai_player_id:
-                            st.markdown('<div class="player-ai">', unsafe_allow_html=True)
-                            st.button("♟", key=f"btn_ai_{key_id}", disabled=True)
+                            st.markdown('<div class="ai-piece">', unsafe_allow_html=True)
+                            st.button(st.session_state.ai_icon, key=btn_key, disabled=True)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # --- LOGIC: Empty Irrelevant Cell ---
+                        else:
+                            st.markdown('<div class="empty-cell">', unsafe_allow_html=True)
+                            st.button(" ", key=btn_key, disabled=True)
                             st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    st.warning("👆 Please **Train Agents** (top sidebar) or **Load a Session** to unlock the Arena.")
+    st.info("👆 **Waiting for Brains...** \nPlease train the agents in the panel above or load a saved session to enter the Arena.")
 
 st.markdown("---")
-st.caption("Built with ❤️ using Streamlit | Strategic RL Hexapawn Arena v1.0")
+st.caption("Strategic RL Hexapawn Arena | Engineered for Nik 👑")
