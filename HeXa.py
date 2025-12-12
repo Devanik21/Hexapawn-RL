@@ -691,7 +691,7 @@ with st.sidebar.expander("4. Brain Storage 💾", expanded=False):
                     if cfg.get("battle_results"):
                         st.session_state.battle_results = cfg["battle_results"]
                         
-                    st.toast("Brains Restored Successfully!", icon="")
+                    st.toast("Brains Restored Successfully!", icon="♾️")
                     import time
                     time.sleep(1)
                     st.rerun()
