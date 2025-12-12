@@ -836,11 +836,19 @@ if train_button:
             status_container.markdown(status_table)
     
     progress_bar.progress(1.0)
-    st.toast("Training Complete!", icon="🎉")
     
+    # --- SAVE STATE AND REFRESH ---
     st.session_state.training_history = history
+    # Explicitly update session state agents
     st.session_state.agent1 = agent1
     st.session_state.agent2 = agent2
+    
+    st.toast("Training Complete! Refreshing UI...", icon="🎉")
+    
+    # CRITICAL FIX: Force the app to rerun so the Sidebar sees the new data
+    import time
+    time.sleep(1) # Give the toast a second to show
+    st.rerun()
 
 # ============================================================================
 # Display Training Charts
