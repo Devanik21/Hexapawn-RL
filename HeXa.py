@@ -475,16 +475,31 @@ def visualize_board(board, title="Hexapawn Board"):
     
     return fig
 
+
 # ============================================================================
-# Save/Load Functions
+# Save/Load Functions (Updated & Robust)
 # ============================================================================
 
+class NumpyEncoder(json.JSONEncoder):
+    """Special encoder to handle Numpy types in JSON"""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
+
 def serialize_q_table(q_table):
-    """Convert Q-table to JSON-serializable format"""
+    """Robustly convert Q-table to JSON-serializable format"""
     serialized_q = {}
     for (state, action_key), value in q_table.items():
+        # Ensure state is a standard list of ints
         state_list = [int(x) for x in state]
-        key_str = json.dumps([state_list, action_key])
+        # Create a string representation of the key
+        # We use a separator '|' which is safer than nested JSON dumps
+        key_str = f"{json.dumps(state_list)}|{action_key}"
         serialized_q[key_str] = float(value)
     return serialized_q
 
@@ -492,39 +507,41 @@ def deserialize_q_table(serialized_q):
     """Convert JSON format back to Q-table"""
     deserialized_q = {}
     for k_str, value in serialized_q.items():
-        key_as_list = json.loads(k_str)
-        state_tuple = tuple(key_as_list[0])
-        action_key = key_as_list[1]
-        deserialized_q[(state_tuple, action_key)] = value
+        try:
+            # Split our custom separator
+            state_str, action_key = k_str.split('|')
+            state_list = json.loads(state_str)
+            state_tuple = tuple(state_list)
+            deserialized_q[(state_tuple, action_key)] = value
+        except Exception:
+            continue # Skip malformed keys
     return deserialized_q
 
 def create_agents_zip(agent1, agent2, config):
     """Create downloadable zip file with agents and config"""
-    agent1_state = {
+    # 1. Prepare Data using the NumpyEncoder
+    agent1_data = {
         "q_table": serialize_q_table(agent1.q_table),
-        "epsilon": agent1.epsilon,
-        "lr": agent1.lr,
-        "gamma": agent1.gamma,
-        "wins": agent1.wins,
-        "losses": agent1.losses,
-        "draws": agent1.draws
+        "epsilon": float(agent1.epsilon),
+        "wins": int(agent1.wins),
+        "losses": int(agent1.losses),
+        "draws": int(agent1.draws)
     }
     
-    agent2_state = {
+    agent2_data = {
         "q_table": serialize_q_table(agent2.q_table),
-        "epsilon": agent2.epsilon,
-        "lr": agent2.lr,
-        "gamma": agent2.gamma,
-        "wins": agent2.wins,
-        "losses": agent2.losses,
-        "draws": agent2.draws
+        "epsilon": float(agent2.epsilon),
+        "wins": int(agent2.wins),
+        "losses": int(agent2.losses),
+        "draws": int(agent2.draws)
     }
-    
+
+    # 2. Write to Zip
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("agent1.json", json.dumps(agent1_state))
-        zf.writestr("agent2.json", json.dumps(agent2_state))
-        zf.writestr("config.json", json.dumps(config))
+        zf.writestr("agent1.json", json.dumps(agent1_data, cls=NumpyEncoder, indent=2))
+        zf.writestr("agent2.json", json.dumps(agent2_data, cls=NumpyEncoder, indent=2))
+        zf.writestr("config.json", json.dumps(config, cls=NumpyEncoder, indent=2))
     
     buffer.seek(0)
     return buffer
@@ -533,22 +550,21 @@ def load_agents_from_zip(uploaded_file):
     """Load agents from uploaded zip file"""
     try:
         with zipfile.ZipFile(uploaded_file, "r") as zf:
+            # Read and parse JSONs
             agent1_state = json.loads(zf.read("agent1.json"))
             agent2_state = json.loads(zf.read("agent2.json"))
             config = json.loads(zf.read("config.json"))
             
-            agent1 = StrategicAgent(1, 
-                                   config.get('lr1', 0.2), 
-                                   config.get('gamma1', 0.95))
+            # Reconstruct Agent 1
+            agent1 = StrategicAgent(1, config.get('lr1', 0.2), config.get('gamma1', 0.95))
             agent1.q_table = deserialize_q_table(agent1_state['q_table'])
             agent1.epsilon = agent1_state.get('epsilon', 0.0)
             agent1.wins = agent1_state.get('wins', 0)
             agent1.losses = agent1_state.get('losses', 0)
             agent1.draws = agent1_state.get('draws', 0)
             
-            agent2 = StrategicAgent(2, 
-                                   config.get('lr2', 0.2), 
-                                   config.get('gamma2', 0.95))
+            # Reconstruct Agent 2
+            agent2 = StrategicAgent(2, config.get('lr2', 0.2), config.get('gamma2', 0.95))
             agent2.q_table = deserialize_q_table(agent2_state['q_table'])
             agent2.epsilon = agent2_state.get('epsilon', 0.0)
             agent2.wins = agent2_state.get('wins', 0)
@@ -556,8 +572,9 @@ def load_agents_from_zip(uploaded_file):
             agent2.draws = agent2_state.get('draws', 0)
             
             return agent1, agent2, config
+            
     except Exception as e:
-        st.error(f"Failed to load agents: {e}")
+        st.error(f"Error loading brain file: {str(e)}")
         return None, None, None
 
 # ============================================================================
@@ -623,38 +640,62 @@ with st.sidebar.expander("3. Training Configuration", expanded=True):
     update_freq = st.number_input("Update Dashboard Every N Games", 10, 1000, 50, 10)
 
 with st.sidebar.expander("4. Brain Storage 💾", expanded=False):
+    # --- SAVE SECTION ---
     if 'agent1' in st.session_state and st.session_state.agent1 is not None:
-        config = {
-            "lr1": lr1, "gamma1": gamma1, "epsilon_decay1": epsilon_decay1, "minimax_depth1": minimax_depth1,
-            "lr2": lr2, "gamma2": gamma2, "epsilon_decay2": epsilon_decay2, "minimax_depth2": minimax_depth2,
-            "training_history": st.session_state.get('training_history', None),
-            "battle_results": st.session_state.get('battle_results', None)
-        }
+        # Check brain size
+        brain_size = len(st.session_state.agent1.q_table) + len(st.session_state.agent2.q_table)
         
-        zip_buffer = create_agents_zip(st.session_state.agent1, 
-                                       st.session_state.agent2, config)
-        st.download_button(
-            label="💾 Download Session Snapshot",
-            data=zip_buffer,
-            file_name="hexapawn_agents.zip",
-            mime="application/zip",
-            use_container_width=True
-        )
+        if brain_size > 0:
+            st.success(f"🧠 Brain Scan: {brain_size} memories found.")
+            
+            config = {
+                "lr1": lr1, "gamma1": gamma1, 
+                "epsilon_decay1": epsilon_decay1, "minimax_depth1": minimax_depth1,
+                "lr2": lr2, "gamma2": gamma2, 
+                "epsilon_decay2": epsilon_decay2, "minimax_depth2": minimax_depth2,
+                "training_history": st.session_state.get('training_history', None),
+                "battle_results": st.session_state.get('battle_results', None)
+            }
+            
+            # Create zip in memory
+            zip_buffer = create_agents_zip(st.session_state.agent1, 
+                                           st.session_state.agent2, config)
+            
+            st.download_button(
+                label="💾 Download Trained Brains",
+                data=zip_buffer,
+                file_name="hexapawn_brains.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
+        else:
+            st.warning("⚠️ Brains are empty! Train the agents before downloading.")
     else:
-        st.warning("Train agents first to download policies.")
+        st.warning("Initialize agents first.")
     
-    uploaded_file = st.file_uploader("Upload Session Snapshot (.zip)", type="zip")
+    st.markdown("---")
+    
+    # --- LOAD SECTION ---
+    uploaded_file = st.file_uploader("Upload Brain Snapshot (.zip)", type="zip")
     if uploaded_file is not None:
         if st.button("📂 Load Session", use_container_width=True):
-            a1, a2, cfg = load_agents_from_zip(uploaded_file)
-            if a1:
-                st.session_state.agent1 = a1
-                st.session_state.agent2 = a2
-                st.session_state.training_history = cfg.get("training_history", None)
-                st.session_state.battle_results = cfg.get("battle_results", None)
-                st.toast("Session Snapshot Restored!", icon="💾")
-                st.rerun()
-
+            with st.spinner("Restoring neural pathways..."):
+                a1, a2, cfg = load_agents_from_zip(uploaded_file)
+                if a1:
+                    st.session_state.agent1 = a1
+                    st.session_state.agent2 = a2
+                    
+                    # Restore history if available
+                    if cfg.get("training_history"):
+                        st.session_state.training_history = cfg["training_history"]
+                    if cfg.get("battle_results"):
+                        st.session_state.battle_results = cfg["battle_results"]
+                        
+                    st.toast("Brains Restored Successfully!", icon="🧠")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                    
 train_button = st.sidebar.button("🚀 Begin Training Epochs", 
                                  use_container_width=True, type="primary")
 
