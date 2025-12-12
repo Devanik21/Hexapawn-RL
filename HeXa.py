@@ -646,7 +646,7 @@ with st.sidebar.expander("4. Brain Storage 💾", expanded=False):
         brain_size = len(st.session_state.agent1.q_table) + len(st.session_state.agent2.q_table)
         
         if brain_size > 0:
-            st.success(f"🧠 Brain Scan: {brain_size} memories found.")
+            st.success(f" Brain Scan: {brain_size} memories found.")
             
             config = {
                 "lr1": lr1, "gamma1": gamma1, 
@@ -691,12 +691,12 @@ with st.sidebar.expander("4. Brain Storage 💾", expanded=False):
                     if cfg.get("battle_results"):
                         st.session_state.battle_results = cfg["battle_results"]
                         
-                    st.toast("Brains Restored Successfully!", icon="🧠")
+                    st.toast("Brains Restored Successfully!", icon="")
                     import time
                     time.sleep(1)
                     st.rerun()
                     
-train_button = st.sidebar.button("🚀 Begin Training Epochs", 
+train_button = st.sidebar.button(" Begin Training Epochs", 
                                  use_container_width=True, type="primary")
 
 if st.sidebar.button("🧹 Clear All & Reset", use_container_width=True):
@@ -998,7 +998,7 @@ if 'agent1' in st.session_state and st.session_state.agent1.q_table:
     # Game Controls
     col_c1, col_c2, col_c3 = st.columns([1.5, 1, 1])
     with col_c1:
-        opponent_choice = st.selectbox("🤖 Select Opponent", ["Agent 1 (White - Defensive)", "Agent 2 (Black - Aggressive)"], key="arena_opp")
+        opponent_choice = st.selectbox(" Select Opponent", ["Agent 1 (White - Defensive)", "Agent 2 (Black - Aggressive)"], key="arena_opp")
     with col_c2:
         starter = st.selectbox("🎲 Who Starts?", ["Human", "AI"], key="arena_start")
     with col_c3:
@@ -1052,7 +1052,7 @@ if 'agent1' in st.session_state and st.session_state.agent1.q_table:
         # B. AI Turn Logic (Automatic)
         elif h_env.current_player == st.session_state.ai_player_id:
             # Display board statically while AI thinks
-            st.info(f"🤖 **AI ({st.session_state.ai_icon}) is thinking...**")
+            st.info(f" **AI ({st.session_state.ai_icon}) is thinking...**")
             
             # Use a progress bar for visual "thinking" effect
             prog_bar = st.progress(0)
