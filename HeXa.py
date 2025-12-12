@@ -955,17 +955,11 @@ if 'agent1' in st.session_state and st.session_state.agent1.q_table:
     if 'human_env' in st.session_state and st.session_state.human_game_active:
         h_env = st.session_state.human_env
         
-        # AI Turn Logic
-        if h_env.current_player == st.session_state.ai_player_id and not h_env.game_over:
-            with st.spinner(f"🤖 AI ({opponent_choice}) is calculating..."):
-                import time
-                time.sleep(0.6)
-                ai_action = st.session_state.ai_agent.choose_action(h_env, training=False)
-                if ai_action:
-                    h_env.make_move(ai_action)
-                    st.rerun()
+        # Initialize AI turn flag
+        if 'ai_thinking' not in st.session_state:
+            st.session_state.ai_thinking = False
         
-        # Status Banner
+        # Status Banner (show first)
         if h_env.game_over:
             if h_env.winner == st.session_state.human_player_id:
                 st.success("🎉 VICTORY! You defeated the AI!")
@@ -973,55 +967,78 @@ if 'agent1' in st.session_state and st.session_state.agent1.q_table:
                 st.error("💀 DEFEAT! The AI is too strong.")
             else:
                 st.warning("🤝 DRAW! A battle of equals.")
+            st.session_state.selected_pawn = None
         else:
             turn_msg = "Your Turn" if h_env.current_player == st.session_state.human_player_id else "AI's Turn"
             st.caption(f"Status: **{turn_msg}**")
-        
-        # Visual Grid
-        board = h_env.board
-        valid_moves = h_env.get_available_actions()
-        
-        # Display instructions
-        if h_env.current_player == st.session_state.human_player_id and not h_env.game_over:
-            st.info("💡 **Click on one of your pawns, then click where you want to move it.**")
+            
+            # Display instructions for human
+            if h_env.current_player == st.session_state.human_player_id:
+                if st.session_state.get('selected_pawn') is None:
+                    st.info("💡 **Step 1: Click on one of your pawns to select it.**")
+                else:
+                    st.info("💡 **Step 2: Click on a highlighted square to move your pawn.**")
         
         # Selection state
         if 'selected_pawn' not in st.session_state:
             st.session_state.selected_pawn = None
         
+        # Visual Grid
+        board = h_env.board
+        all_valid_moves = h_env.get_available_actions()
+        
+        # If pawn is selected, filter moves from that pawn
+        if st.session_state.selected_pawn:
+            valid_destinations = [
+                to_pos for from_pos, to_pos in all_valid_moves 
+                if from_pos == st.session_state.selected_pawn
+            ]
+        else:
+            valid_destinations = []
+        
         for r in range(3):
             cols = st.columns(3)
             for c in range(3):
                 cell_value = board[r, c]
-                button_key = f"btn_{r}_{c}_{len(h_env.move_history)}"
+                button_key = f"btn_{r}_{c}_{len(h_env.move_history)}_{h_env.current_player}"
                 
-                # Highlight selected pawn
+                # Check if this square is a valid destination
+                is_valid_dest = (r, c) in valid_destinations
                 is_selected = st.session_state.selected_pawn == (r, c)
                 
                 # Empty spot
                 if cell_value == 0:
-                    # Check if this is a valid destination
-                    if st.session_state.selected_pawn and not h_env.game_over:
-                        possible_move = (st.session_state.selected_pawn, (r, c))
-                        if possible_move in valid_moves:
-                            if cols[c].button("✓", key=button_key, use_container_width=True):
-                                h_env.make_move(possible_move)
-                                st.session_state.selected_pawn = None
-                                st.rerun()
-                        else:
-                            cols[c].button("", key=button_key, disabled=True, use_container_width=True)
-                    else:
-                        cols[c].button("", key=button_key, disabled=True, use_container_width=True)
-                
-                # Player pawns
-                elif cell_value == st.session_state.human_player_id:
-                    # Human's pawn - clickable to select
-                    if not h_env.game_over and h_env.current_player == st.session_state.human_player_id:
-                        pawn_symbol = "♟" if not is_selected else "⬤"
-                        if cols[c].button(pawn_symbol, key=button_key, use_container_width=True):
-                            st.session_state.selected_pawn = (r, c)
+                    if is_valid_dest and not h_env.game_over and h_env.current_player == st.session_state.human_player_id:
+                        # Valid move destination - show green checkmark
+                        if cols[c].button("✅", key=button_key, use_container_width=True):
+                            move = (st.session_state.selected_pawn, (r, c))
+                            h_env.make_move(move)
+                            st.session_state.selected_pawn = None
+                            st.session_state.ai_thinking = True
                             st.rerun()
                     else:
+                        # Empty but not a valid destination
+                        cols[c].markdown(
+                            '<div class="game-cell" style="background-color: #1a1a1a;"></div>',
+                            unsafe_allow_html=True
+                        )
+                
+                # Human's pawns
+                elif cell_value == st.session_state.human_player_id:
+                    if not h_env.game_over and h_env.current_player == st.session_state.human_player_id:
+                        # Clickable to select
+                        pawn_symbol = "⬤" if is_selected else "♟"
+                        button_label = f"{pawn_symbol}"
+                        if cols[c].button(button_label, key=button_key, use_container_width=True):
+                            if is_selected:
+                                # Deselect if clicking same pawn
+                                st.session_state.selected_pawn = None
+                            else:
+                                # Select this pawn
+                                st.session_state.selected_pawn = (r, c)
+                            st.rerun()
+                    else:
+                        # Not human's turn - just display
                         color_class = "player-white" if cell_value == 1 else "player-black"
                         cols[c].markdown(
                             f'<div class="game-cell {color_class}">♟</div>',
@@ -1035,6 +1052,18 @@ if 'agent1' in st.session_state and st.session_state.agent1.q_table:
                         f'<div class="game-cell {color_class}">♟</div>',
                         unsafe_allow_html=True
                     )
+        
+        # AI Turn Logic (execute AFTER rendering to avoid double-turn)
+        if not h_env.game_over and h_env.current_player == st.session_state.ai_player_id and st.session_state.ai_thinking:
+            with st.spinner(f"🤖 AI is thinking..."):
+                import time
+                time.sleep(0.8)
+                ai_action = st.session_state.ai_agent.choose_action(h_env, training=False)
+                if ai_action:
+                    h_env.make_move(ai_action)
+                st.session_state.ai_thinking = False
+                st.session_state.selected_pawn = None
+                st.rerun()
 else:
     st.info("👆 Please Train or Load agents above to unlock the Arena.")
 
