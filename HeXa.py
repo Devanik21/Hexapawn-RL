@@ -989,7 +989,7 @@ if 'agent1' in st.session_state and st.session_state.agent1.q_table:
         if h_env.game_over:
             st.markdown("### 🏁 Match Result")
             if h_env.winner == st.session_state.human_player_id:
-                st.balloons()
+                
                 st.success(f"🎉 **VICTORY!** You outsmarted the AI!")
             elif h_env.winner == st.session_state.ai_player_id:
                 st.error(f"💀 **DEFEAT!** The AI won this round.")
